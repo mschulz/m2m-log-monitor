@@ -49,6 +49,11 @@ them together with no business logic of its own beyond the per-app loop:
   error/warning lines by keyword regex, and computes the "newest line"
   watermark. `LogLine.hash` (sha256 of the raw line) plus timestamp is what
   makes de-duplication exact even when two lines share a timestamp.
+  `classify()` first drops lines matching `NOISE_RE` (known-noisy but not
+  actionable, e.g. `no pg_hba.conf entry for host` from internet
+  port-scanners hitting Heroku Postgres addons) before bucketing the rest
+  into errors/warnings — add new substrings to `NOISE_PATTERNS` as new noise
+  sources turn up.
 - **`state_store.py`** — Postgres-backed watermark persistence (one row per
   app: last-seen timestamp + hash + whether that run had errors, used to
   detect "back to clean" for the resolved-notification). `psycopg.connect`

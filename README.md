@@ -28,7 +28,10 @@ Each run, for every app in `MONITORED_APPS`:
    lines, then drop anything older than `LOG_LOOKBACK_HOURS` (default 6,
    matching the Scheduler cadence) so a missing/reset watermark can't dredge
    up days-old errors still sitting in the log buffer. Remaining lines are
-   classified as error/warning by keyword.
+   classified as error/warning by keyword, after dropping known-noisy lines
+   (e.g. `no pg_hba.conf entry for host` from internet port-scanners hitting
+   Heroku Postgres addons) that would otherwise match the error keywords —
+   see `log_parser.NOISE_PATTERNS`.
 5. Post one batched Slack message per app with any new error/warning lines
    found, and advance the watermark. If the app had errors last run and this
    run comes back clean, post a "resolved" message instead.

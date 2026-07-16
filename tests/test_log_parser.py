@@ -51,6 +51,29 @@ def test_classify_has_no_false_positive_on_ordinary_lines():
     assert warnings == []
 
 
+def test_is_noise_line_matches_pg_hba_scanner_noise():
+    raw = (
+        'FATAL: no pg_hba.conf entry for host "1.2.3.4", '
+        'user "postgres", database "postgres", no encryption'
+    )
+    line = log_parser.LogLine(
+        timestamp=None, source="heroku-postgres", dyno="db", message=raw, raw=raw
+    )
+    assert log_parser.is_noise_line(line)
+
+
+def test_classify_drops_pg_hba_scanner_noise_despite_fatal_keyword():
+    raw = (
+        "2024-05-01T12:00:00.000000+00:00 heroku-postgres[db]: FATAL: "
+        'no pg_hba.conf entry for host "1.2.3.4", user "postgres", '
+        'database "postgres", no encryption\n'
+    )
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert errors == []
+    assert warnings == []
+
+
 def test_newest_line_picks_latest_timestamp():
     lines = log_parser.parse_log_text(SAMPLE_LOG)
     newest = log_parser.newest_line(lines)

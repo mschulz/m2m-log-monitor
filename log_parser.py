@@ -22,6 +22,13 @@ ERROR_RE = re.compile(
 )
 WARNING_RE = re.compile(r"\b(warn|warning)\b", re.IGNORECASE)
 
+# Known-noisy lines that match ERROR_RE/WARNING_RE but aren't worth reporting,
+# e.g. internet port-scanners probing Heroku Postgres addons.
+NOISE_PATTERNS = (
+    "no pg_hba.conf entry for host",
+)
+NOISE_RE = re.compile("|".join(re.escape(p) for p in NOISE_PATTERNS), re.IGNORECASE)
+
 
 @dataclass(frozen=True)
 class LogLine:
@@ -82,15 +89,23 @@ def is_warning_line(line: LogLine) -> bool:
     return bool(WARNING_RE.search(line.message))
 
 
+def is_noise_line(line: LogLine) -> bool:
+    return bool(NOISE_RE.search(line.message))
+
+
 def classify(lines, include_warnings):
     """Split lines into (errors, warnings) preserving order.
 
-    A line matching both patterns is counted only as an error. `warnings` is
-    always `[]` when `include_warnings` is False.
+    Lines matching `NOISE_RE` (known-noisy but not actionable, e.g. Postgres
+    port-scan rejections) are dropped before classification. A remaining
+    line matching both error and warning patterns is counted only as an
+    error. `warnings` is always `[]` when `include_warnings` is False.
     """
     errors = []
     warnings = []
     for line in lines:
+        if is_noise_line(line):
+            continue
         if is_error_line(line):
             errors.append(line)
         elif include_warnings and is_warning_line(line):
