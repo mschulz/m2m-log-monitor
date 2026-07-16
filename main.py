@@ -31,8 +31,10 @@ def check_app(app_name):
         slack_notifier.send_dyno_down(app_name, down_dynos)
 
     has_state_store = bool(config.DATABASE_URL)
-    last_ts, last_hash = (
-        state_store.get_last_state(app_name) if has_state_store else (None, None)
+    last_ts, last_hash, had_errors_before = (
+        state_store.get_last_state(app_name)
+        if has_state_store
+        else (None, None, False)
     )
 
     logplex_url = heroku_client.create_log_session(app_name)
@@ -47,11 +49,15 @@ def check_app(app_name):
 
     if errors or warnings:
         slack_notifier.send_error_report(app_name, errors, warnings)
+    elif has_state_store and had_errors_before:
+        slack_notifier.send_resolved(app_name)
 
     if has_state_store:
         newest = log_parser.newest_line(lines)
         if newest is not None:
-            state_store.set_last_state(app_name, newest.timestamp, newest.hash)
+            state_store.set_last_state(
+                app_name, newest.timestamp, newest.hash, bool(errors)
+            )
 
     return (
         f"ok (errors={len(errors)}, warnings={len(warnings)}, "

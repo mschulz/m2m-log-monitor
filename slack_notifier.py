@@ -69,6 +69,12 @@ def send_dyno_down(app_name, down_dynos):
     _post_to_slack(text)
 
 
+def send_resolved(app_name):
+    """Alert that an app's previously reported errors have cleared."""
+    text = f"*{app_name}*: no new errors since the last check (previously reported errors have cleared)."
+    _post_to_slack(text)
+
+
 def send_check_failure(app_name, error):
     """Alert that the monitor itself failed to check an app."""
     text = f"*{app_name}*: log monitor could not check this app: {error}"
