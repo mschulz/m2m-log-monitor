@@ -17,6 +17,7 @@ MONITORED_APPS = [
     "m2m-klaviyo-addresses",
     "m2m-launch27",
     "m2m-lead-data",
+    "m2m-log-monitor",
     "m2m-new-sales",
     "m2m-pays",
     "m2m-proxy",
