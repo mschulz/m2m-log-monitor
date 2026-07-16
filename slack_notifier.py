@@ -14,7 +14,11 @@ def _post_to_slack(text):
         return
     response = requests.post(
         config.SLACK_WEBHOOK_URL,
-        json={"text": text},
+        json={
+            "text": text,
+            "username": "M2M Log Monitor",
+            "icon_emoji": ":rotating_light:",
+        },
         timeout=config.HTTP_TIMEOUT_SECONDS,
     )
     if not response.ok:
