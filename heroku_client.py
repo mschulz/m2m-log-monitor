@@ -50,8 +50,8 @@ def _post(path, json_body=None):
 
 def get_maintenance_mode(app_name):
     """Return True if the app currently has maintenance mode enabled."""
-    data = _get(f"/apps/{app_name}/maintenance")
-    return bool(data.get("enabled"))
+    data = _get(f"/apps/{app_name}")
+    return bool(data.get("maintenance"))
 
 
 def get_dynos(app_name):

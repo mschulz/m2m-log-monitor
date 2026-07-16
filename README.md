@@ -17,8 +17,8 @@ The list of monitored apps lives in `config.py` (`MONITORED_APPS`).
 
 Each run, for every app in `MONITORED_APPS`:
 
-1. Check maintenance mode (`GET /apps/{app}/maintenance`). If enabled, skip
-   the app entirely for this run.
+1. Check maintenance mode (`maintenance` field on `GET /apps/{app}`). If
+   enabled, skip the app entirely for this run.
 2. Check dyno states (`GET /apps/{app}/dynos`). Any dyno in `crashed` or
    `down` state triggers a Slack alert.
 3. Open a Logplex log session (`POST /apps/{app}/log-sessions`) and fetch the
@@ -39,11 +39,14 @@ around.
 
 ```bash
 python3.13 -m venv .venv
-source venv/bin/activate
+source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env  # fill in real values
 ```
 
-Required environment variables:
+Environment variables are loaded from `.env` automatically via
+`python-dotenv` (see `.env.example` for the full list); it's gitignored so
+real secrets never get committed. Required environment variables:
 
 | Var | Required | Purpose |
 |---|---|---|
@@ -57,8 +60,14 @@ Required environment variables:
 Dry run locally against real Heroku apps without touching Slack or Postgres:
 
 ```bash
-HEROKU_API_KEY=... DRY_RUN=true python main.py
+DATABASE_URL= HEROKU_API_KEY=... DRY_RUN=true python main.py
 ```
+
+`DRY_RUN=true` only suppresses the Slack POST (prints instead); it does
+**not** skip Postgres writes. If `.env` has a real `DATABASE_URL`, override
+it to empty for the dry run so the production watermark table isn't
+mutated — the app already treats a missing `DATABASE_URL` as "run without
+a state store" (see `main.check_app`'s `has_state_store` check).
 
 ## Deploying to Heroku
 
