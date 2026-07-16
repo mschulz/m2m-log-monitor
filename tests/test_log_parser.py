@@ -64,6 +64,25 @@ def test_lines_after_with_no_watermark_returns_all():
     assert len(kept) == len(lines)
 
 
+def test_filter_since_drops_lines_older_than_cutoff():
+    lines = log_parser.parse_log_text(SAMPLE_LOG)
+    cutoff = datetime(2024, 5, 1, 12, 0, 3, tzinfo=timezone.utc)
+    kept = log_parser.filter_since(lines, cutoff)
+    assert [line.message for line in kept] == [
+        "Traceback (most recent call last):",
+        "WARNING: deprecated config used",
+        "Request completed normally",
+    ]
+
+
+def test_filter_since_keeps_lines_with_no_parseable_timestamp():
+    raw = "not-a-timestamp app[web.1]: mystery line\n" + SAMPLE_LOG
+    lines = log_parser.parse_log_text(raw)
+    cutoff = datetime(2099, 1, 1, tzinfo=timezone.utc)
+    kept = log_parser.filter_since(lines, cutoff)
+    assert [line.message for line in kept] == ["mystery line"]
+
+
 def test_lines_after_filters_out_already_seen_lines():
     lines = log_parser.parse_log_text(SAMPLE_LOG)
     watermark_line = lines[2]  # the "ERROR: something broke" line

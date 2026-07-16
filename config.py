@@ -60,6 +60,8 @@ DRY_RUN = os.environ.get("DRY_RUN", "false").strip().lower() in (
 
 LOG_SESSION_LINES = int(os.environ.get("LOG_SESSION_LINES", "1500"))
 
+LOG_LOOKBACK_HOURS = int(os.environ.get("LOG_LOOKBACK_HOURS", "6"))
+
 DOWN_DYNO_STATES = {"crashed", "down"}
 
 HEROKU_API_BASE = "https://api.heroku.com"

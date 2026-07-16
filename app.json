@@ -25,6 +25,11 @@
       "value": "1500",
       "required": false
     },
+    "LOG_LOOKBACK_HOURS": {
+      "description": "Only report log lines from within this many hours of now, regardless of the stored watermark",
+      "value": "6",
+      "required": false
+    },
     "DRY_RUN": {
       "description": "Set to 'true' to print Slack payloads instead of sending them (for manual testing)",
       "value": "false",

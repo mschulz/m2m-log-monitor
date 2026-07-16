@@ -11,6 +11,7 @@ A failure checking one app is caught and reported without stopping the run
 for the remaining apps.
 """
 import sys
+from datetime import datetime, timedelta, timezone
 
 import config
 import heroku_client
@@ -45,6 +46,8 @@ def check_app(app_name):
         return "ok (no log lines returned, dynos_down=%d)" % len(down_dynos)
 
     new_lines = log_parser.lines_after(lines, last_ts, last_hash)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=config.LOG_LOOKBACK_HOURS)
+    new_lines = log_parser.filter_since(new_lines, cutoff)
     errors, warnings = log_parser.classify(new_lines, config.REPORT_WARNINGS)
 
     if errors or warnings:

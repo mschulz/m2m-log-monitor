@@ -50,9 +50,10 @@ them together with no business logic of its own beyond the per-app loop:
   watermark. `LogLine.hash` (sha256 of the raw line) plus timestamp is what
   makes de-duplication exact even when two lines share a timestamp.
 - **`state_store.py`** — Postgres-backed watermark persistence (one row per
-  app: last-seen timestamp + hash). `psycopg.connect` is the only thing
-  tests mock (see `tests/test_state_store.py`'s `FakeConnection`/
-  `FakeCursor`) — there's no ORM.
+  app: last-seen timestamp + hash + whether that run had errors, used to
+  detect "back to clean" for the resolved-notification). `psycopg.connect`
+  is the only thing tests mock (see `tests/test_state_store.py`'s
+  `FakeConnection`/`FakeCursor`) — there's no ORM.
 - **`slack_notifier.py`** — all outbound Slack messages go through
   `_post_to_slack`, which is the single `DRY_RUN` gate (prints instead of
   POSTing). Long error/warning reports are chunked to stay under Slack's
@@ -62,12 +63,18 @@ them together with no business logic of its own beyond the per-app loop:
 
 1. Maintenance mode check → skip app entirely if enabled.
 2. Dyno state check → alert (but don't skip) if any dyno is `crashed`/`down`.
-3. Fetch the last watermark from `state_store` (skipped if `DATABASE_URL` is
-   unset — the app then re-reports the whole log buffer every run).
+3. Fetch the last watermark (+ `had_errors` flag) from `state_store`
+   (skipped if `DATABASE_URL` is unset — the app then re-reports the whole
+   log buffer every run, with no resolved-notification).
 4. Open a Logplex log session and fetch text, parse it, filter to lines
-   after the watermark, classify into errors/warnings.
-5. Send one batched Slack report if there's anything new, then advance the
-   watermark to the newest line's (timestamp, hash).
+   after the watermark, then drop anything older than
+   `config.LOG_LOOKBACK_HOURS` (default 6h) so a missing/reset watermark
+   can't dredge up days-old errors — classify what's left into
+   errors/warnings.
+5. Send one batched Slack report if there's anything new; if there's
+   nothing new but the previous run had errors, send a resolved message
+   instead. Then advance the watermark to the newest line's
+   (timestamp, hash, had_errors).
 
 A failure anywhere in this flow for one app (`HerokuApiError` or anything
 else) is caught in `main.main()`, reported via `send_check_failure`, and

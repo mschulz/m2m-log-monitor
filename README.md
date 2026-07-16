@@ -25,9 +25,13 @@ Each run, for every app in `MONITORED_APPS`:
    recent log buffer.
 4. Compare against the last-seen watermark stored in Postgres (timestamp +
    line hash of the newest line from the previous run) to find genuinely new
-   lines, then classify them as error/warning by keyword.
+   lines, then drop anything older than `LOG_LOOKBACK_HOURS` (default 6,
+   matching the Scheduler cadence) so a missing/reset watermark can't dredge
+   up days-old errors still sitting in the log buffer. Remaining lines are
+   classified as error/warning by keyword.
 5. Post one batched Slack message per app with any new error/warning lines
-   found, and advance the watermark.
+   found, and advance the watermark. If the app had errors last run and this
+   run comes back clean, post a "resolved" message instead.
 
 **Known limitation:** Heroku's log-session API returns a rolling buffer, not
 a true time-range query. A very high-volume dyno could produce enough log
@@ -55,6 +59,7 @@ real secrets never get committed. Required environment variables:
 | `SLACK_WEBHOOK_URL` | yes (unless `DRY_RUN`) | Incoming Webhook URL for `#m2m-system-alerts` |
 | `REPORT_WARNINGS` | no | `true` to also report warning lines (default `false`) |
 | `LOG_SESSION_LINES` | no | Log lines fetched per app per run (default `1500`) |
+| `LOG_LOOKBACK_HOURS` | no | Only report lines from within this many hours of now (default `6`) |
 | `DRY_RUN` | no | `true` to print Slack payloads instead of sending, and skip the DB (default `false`) |
 
 Dry run locally against real Heroku apps without touching Slack or Postgres:

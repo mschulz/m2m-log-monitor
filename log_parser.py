@@ -110,6 +110,16 @@ def newest_line(lines):
     return max(timestamped, key=lambda line: line.timestamp)
 
 
+def filter_since(lines, cutoff):
+    """Return only lines at or after `cutoff`; lines with no parseable timestamp are kept.
+
+    Bounds how far back a report can reach after a watermark reset or a
+    first-ever run, so results aren't dominated by log lines from days
+    earlier still sitting in Heroku's rolling log buffer.
+    """
+    return [line for line in lines if line.timestamp is None or line.timestamp >= cutoff]
+
+
 def lines_after(lines, after_timestamp, after_hash):
     """Return lines newer than the given watermark.
 
