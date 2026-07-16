@@ -1,0 +1,34 @@
+{
+  "name": "m2m-log-monitor",
+  "description": "Monitors error/warning logs, dyno health, and maintenance mode across the m2m/lca/mlc Heroku fleet, alerting to Slack. Run on a 6-hour Heroku Scheduler job.",
+  "keywords": ["python", "heroku", "logs", "monitoring", "slack"],
+  "addons": [
+    "heroku-postgresql:mini",
+    "scheduler:standard"
+  ],
+  "env": {
+    "HEROKU_API_KEY": {
+      "description": "Heroku Platform API token for an account/collaborator with access to every monitored app",
+      "required": true
+    },
+    "SLACK_WEBHOOK_URL": {
+      "description": "Incoming Webhook URL for the #m2m-system-alerts Slack channel",
+      "required": true
+    },
+    "REPORT_WARNINGS": {
+      "description": "Set to 'true' to also report warning-level log lines, not just errors",
+      "value": "false",
+      "required": false
+    },
+    "LOG_SESSION_LINES": {
+      "description": "Number of recent log lines to fetch per app per run",
+      "value": "1500",
+      "required": false
+    },
+    "DRY_RUN": {
+      "description": "Set to 'true' to print Slack payloads instead of sending them (for manual testing)",
+      "value": "false",
+      "required": false
+    }
+  }
+}
