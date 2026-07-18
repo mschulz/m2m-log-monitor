@@ -49,11 +49,26 @@ them together with no business logic of its own beyond the per-app loop:
   error/warning lines by keyword regex, and computes the "newest line"
   watermark. `LogLine.hash` (sha256 of the raw line) plus timestamp is what
   makes de-duplication exact even when two lines share a timestamp.
-  `classify()` first drops lines matching `NOISE_RE` (known-noisy but not
-  actionable, e.g. `no pg_hba.conf entry for host` from internet
-  port-scanners hitting Heroku Postgres addons) before bucketing the rest
-  into errors/warnings — add new substrings to `NOISE_PATTERNS` as new noise
-  sources turn up.
+  `classify()` drops two categories of line before bucketing the rest into
+  errors/warnings:
+  - Lines matching `NOISE_RE` — known-noisy substrings that aren't
+    actionable, e.g. internet port-scanners hitting Heroku Postgres addons
+    (`no pg_hba.conf entry for host`, `unsupported frontend protocol`, `no
+    PostgreSQL user name specified in startup packet`, a failed login as
+    the literal user `"postgres"`), vulnerability scanners probing web
+    dynos for a CMS that was never installed (`/wp-`), and google-auth's
+    benign Regional Access Boundary token-refresh probe (swallowed
+    internally; see
+    [googleapis/google-cloud-python#17515](https://github.com/googleapis/google-cloud-python/issues/17515)).
+    Add new substrings to `NOISE_PATTERNS` as new noise sources turn up.
+  - Lines where `has_benign_explicit_level()` is true — Heroku router
+    (`at=info`) and uvicorn access-log (`INFO:` prefix) lines carry their
+    own authoritative severity marker, which overrides incidental
+    `ERROR_RE`/`WARNING_RE` keyword hits elsewhere in the line (e.g. a
+    scanner requesting `/error.php` matches `\berror\b` in the URL despite
+    the line being pure access-log noise). Genuine router errors
+    (`at=error`, e.g. H12 timeouts) and uvicorn's own `ERROR:`-level lines
+    are unaffected.
 - **`state_store.py`** — Postgres-backed watermark persistence (one row per
   app: last-seen timestamp + hash + whether that run had errors, used to
   detect "back to clean" for the resolved-notification). `psycopg.connect`
@@ -61,8 +76,11 @@ them together with no business logic of its own beyond the per-app loop:
   `FakeConnection`/`FakeCursor`) — there's no ORM.
 - **`slack_notifier.py`** — all outbound Slack messages go through
   `_post_to_slack`, which is the single `DRY_RUN` gate (prints instead of
-  POSTing). Long error/warning reports are chunked to stay under Slack's
-  message size limit (`_MAX_CHUNK_CHARS`).
+  POSTing) and sets an explicit `username`/`icon_emoji` on every payload so
+  messages display consistently regardless of which Slack app the
+  `SLACK_WEBHOOK_URL` was originally created under. Long error/warning
+  reports are chunked to stay under Slack's message size limit
+  (`_MAX_CHUNK_CHARS`).
 
 ### Per-app flow (`main.check_app`)
 

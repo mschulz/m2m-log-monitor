@@ -9,7 +9,9 @@ hours for:
 - Skips apps entirely while they're in maintenance mode
 
 Findings are posted to the `#m2m-system-alerts` Slack channel via an
-Incoming Webhook.
+Incoming Webhook, with an explicit `username`/`icon_emoji` set on every
+message so it displays consistently regardless of which Slack app the
+webhook URL was created under.
 
 The list of monitored apps lives in `config.py` (`MONITORED_APPS`).
 
@@ -28,10 +30,15 @@ Each run, for every app in `MONITORED_APPS`:
    lines, then drop anything older than `LOG_LOOKBACK_HOURS` (default 6,
    matching the Scheduler cadence) so a missing/reset watermark can't dredge
    up days-old errors still sitting in the log buffer. Remaining lines are
-   classified as error/warning by keyword, after dropping known-noisy lines
-   (e.g. `no pg_hba.conf entry for host` from internet port-scanners hitting
-   Heroku Postgres addons) that would otherwise match the error keywords —
-   see `log_parser.NOISE_PATTERNS`.
+   classified as error/warning by keyword, after dropping lines that would
+   otherwise match the error/warning keywords but aren't actionable:
+   - Known-noisy substrings (internet scanners hitting Heroku Postgres
+     addons or probing for a CMS that isn't installed, google-auth's benign
+     Regional Access Boundary probe) — see `log_parser.NOISE_PATTERNS`.
+   - Heroku router (`at=info`) and app access-log (`INFO:`) lines, where an
+     incidental keyword match in the request path (e.g. `/error.php`) would
+     otherwise look like an error despite the line's own explicit severity
+     marker saying otherwise — see `log_parser.has_benign_explicit_level`.
 5. Post one batched Slack message per app with any new error/warning lines
    found, and advance the watermark. If the app had errors last run and this
    run comes back clean, post a "resolved" message instead.
