@@ -1,55 +1,36 @@
 # m2m-log-monitor
 
-Standalone Python 3.13 program that checks a fleet of Heroku apps every 6
-hours for:
+A scheduled health check for a fleet of Heroku apps. Every 6 hours it checks
+each app for maintenance mode, crashed/down dynos, and new error/warning
+lines in the logs, then posts a summary to Slack.
 
-- Error log lines (always reported)
-- Warning log lines (only if `REPORT_WARNINGS=true`)
-- Crashed/down dynos
+## Features
+
+- Reports new error log lines (and optionally warnings) since the last run
+- Alerts on crashed or down dynos
 - Skips apps entirely while they're in maintenance mode
-
-Findings are posted to the `#m2m-system-alerts` Slack channel via an
-Incoming Webhook, with an explicit `username`/`icon_emoji` set on every
-message so it displays consistently regardless of which Slack app the
-webhook URL was created under.
+- Filters out known-noisy log lines (e.g. scanner traffic) so reports stay
+  actionable
+- Sends a "resolved" message when a previously-erroring app comes back clean
+- Posts findings to a Slack channel via an Incoming Webhook
 
 The list of monitored apps lives in `config.py` (`MONITORED_APPS`).
 
 ## How it works
 
-Each run, for every app in `MONITORED_APPS`:
+This is a standalone script, not a server — it runs to completion and exits.
+It's intended to be invoked on a schedule (e.g. Heroku Scheduler) rather than
+run continuously. Each run walks every app in `MONITORED_APPS`, checks its
+health and logs, and sends at most one Slack message per app.
 
-1. Check maintenance mode (`maintenance` field on `GET /apps/{app}`). If
-   enabled, skip the app entirely for this run.
-2. Check dyno states (`GET /apps/{app}/dynos`). Any dyno in `crashed` or
-   `down` state triggers a Slack alert.
-3. Open a Logplex log session (`POST /apps/{app}/log-sessions`) and fetch the
-   recent log buffer.
-4. Compare against the last-seen watermark stored in Postgres (timestamp +
-   line hash of the newest line from the previous run) to find genuinely new
-   lines, then drop anything older than `LOG_LOOKBACK_HOURS` (default 6,
-   matching the Scheduler cadence) so a missing/reset watermark can't dredge
-   up days-old errors still sitting in the log buffer. Remaining lines are
-   classified as error/warning by keyword, after dropping lines that would
-   otherwise match the error/warning keywords but aren't actionable:
-   - Known-noisy substrings (internet scanners hitting Heroku Postgres
-     addons or probing for a CMS that isn't installed, google-auth's benign
-     Regional Access Boundary probe) — see `log_parser.NOISE_PATTERNS`.
-   - Heroku router (`at=info`) and app access-log (`INFO:`) lines, where an
-     incidental keyword match in the request path (e.g. `/error.php`) would
-     otherwise look like an error despite the line's own explicit severity
-     marker saying otherwise — see `log_parser.has_benign_explicit_level`.
-5. Post one batched Slack message per app with any new error/warning lines
-   found, and advance the watermark. If the app had errors last run and this
-   run comes back clean, post a "resolved" message instead.
+## Requirements
 
-**Known limitation:** Heroku's log-session API returns a rolling buffer, not
-a true time-range query. A very high-volume dyno could produce enough log
-output to roll past 6 hours of history between runs, and those lines would
-never be seen. This is an accepted tradeoff, not something this program works
-around.
+- Python 3.13
+- A Heroku account/API key with access to every monitored app
+- A Postgres database (for tracking what's already been reported)
+- A Slack Incoming Webhook
 
-## Local setup
+## Setup
 
 ```bash
 python3.13 -m venv .venv
@@ -59,30 +40,30 @@ cp .env.example .env  # fill in real values
 ```
 
 Environment variables are loaded from `.env` automatically via
-`python-dotenv` (see `.env.example` for the full list); it's gitignored so
-real secrets never get committed. Required environment variables:
+`python-dotenv`; `.env` is gitignored so real secrets never get committed.
 
 | Var | Required | Purpose |
 |---|---|---|
 | `HEROKU_API_KEY` | yes | `heroku auth:token`, from an account with access to every app in `MONITORED_APPS` |
-| `DATABASE_URL` | yes (unless `DRY_RUN`) | Postgres connection string for watermark storage |
-| `SLACK_WEBHOOK_URL` | yes (unless `DRY_RUN`) | Incoming Webhook URL for `#m2m-system-alerts` |
+| `DATABASE_URL` | yes (unless `DRY_RUN`) | Postgres connection string used to track what's already been reported |
+| `SLACK_WEBHOOK_URL` | yes (unless `DRY_RUN`) | Incoming Webhook URL for the target Slack channel |
 | `REPORT_WARNINGS` | no | `true` to also report warning lines (default `false`) |
 | `LOG_SESSION_LINES` | no | Log lines fetched per app per run (default `1500`) |
 | `LOG_LOOKBACK_HOURS` | no | Only report lines from within this many hours of now (default `6`) |
-| `DRY_RUN` | no | `true` to print Slack payloads instead of sending, and skip the DB (default `false`) |
+| `DRY_RUN` | no | `true` to print Slack messages instead of sending, and skip the database (default `false`) |
 
-Dry run locally against real Heroku apps without touching Slack or Postgres:
+## Running
 
 ```bash
-DATABASE_URL= HEROKU_API_KEY=... DRY_RUN=true python main.py
+python main.py
 ```
 
-`DRY_RUN=true` only suppresses the Slack POST (prints instead); it does
-**not** skip Postgres writes. If `.env` has a real `DATABASE_URL`, override
-it to empty for the dry run so the production watermark table isn't
-mutated — the app already treats a missing `DATABASE_URL` as "run without
-a state store" (see `main.check_app`'s `has_state_store` check).
+To try it out locally without sending real Slack messages or touching the
+database:
+
+```bash
+DATABASE_URL= DRY_RUN=true python main.py
+```
 
 ## Deploying to Heroku
 
@@ -101,7 +82,7 @@ heroku addons:open scheduler
 ```
 
 - Command: `python main.py`
-- Frequency: Every 6 hours
+- Frequency: every 6 hours
 
 ## Tests
 
