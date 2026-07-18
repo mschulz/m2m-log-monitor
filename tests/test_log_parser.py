@@ -74,6 +74,63 @@ def test_classify_drops_pg_hba_scanner_noise_despite_fatal_keyword():
     assert warnings == []
 
 
+def test_classify_drops_postgres_protocol_scanner_noise():
+    raw = (
+        "2026-07-17T23:09:40.000000+00:00 app[postgres.1953744]: FATAL:  "
+        "unsupported frontend protocol 16.0: server supports 3.0 to 3.0\n"
+    )
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert errors == []
+    assert warnings == []
+
+
+def test_classify_drops_postgres_missing_username_scanner_noise():
+    raw = (
+        "2026-07-18T01:11:38.000000+00:00 app[postgres.1971921]: FATAL:  "
+        "no PostgreSQL user name specified in startup packet\n"
+    )
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert errors == []
+    assert warnings == []
+
+
+def test_classify_drops_postgres_default_user_auth_scanner_noise():
+    raw = (
+        "2026-07-18T00:22:35.000000+00:00 app[postgres.1965022]: FATAL:  "
+        'password authentication failed for user "postgres"\n'
+    )
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert errors == []
+    assert warnings == []
+
+
+def test_classify_keeps_password_auth_failure_for_non_default_user():
+    raw = (
+        "2026-07-18T00:22:35.000000+00:00 app[postgres.1965022]: FATAL:  "
+        'password authentication failed for user "app_prod_user"\n'
+    )
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert len(errors) == 1
+
+
+def test_classify_drops_wordpress_scanner_noise_on_web_and_router_lines():
+    raw = (
+        '2026-07-17T23:42:57.127429+00:00 app[web.1]: INFO:     172.202.76.205:0 - '
+        '"GET /wp-includes/registration-exception.php HTTP/1.1" 404 Not Found\n'
+        '2026-07-17T23:42:57.127724+00:00 heroku[router]: at=info method=GET '
+        'path="/wp-includes/registration-exception.php" host=rating.maid2match.com.au '
+        'status=404\n'
+    )
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert errors == []
+    assert warnings == []
+
+
 def test_newest_line_picks_latest_timestamp():
     lines = log_parser.parse_log_text(SAMPLE_LOG)
     newest = log_parser.newest_line(lines)

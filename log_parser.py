@@ -23,9 +23,21 @@ ERROR_RE = re.compile(
 WARNING_RE = re.compile(r"\b(warn|warning)\b", re.IGNORECASE)
 
 # Known-noisy lines that match ERROR_RE/WARNING_RE but aren't worth reporting,
-# e.g. internet port-scanners probing Heroku Postgres addons.
+# e.g. internet port-scanners probing Heroku Postgres addons, and vulnerability
+# scanners probing web dynos for CMS installs that were never there.
 NOISE_PATTERNS = (
     "no pg_hba.conf entry for host",
+    # Malformed/non-Postgres startup packets: a real app always speaks valid
+    # Postgres protocol, so these can only be raw connection scanners.
+    "unsupported frontend protocol",
+    "no PostgreSQL user name specified in startup packet",
+    # Heroku Postgres addon users are randomly generated, never "postgres",
+    # so a failed login as that literal username is a scanner, not the app.
+    'password authentication failed for user "postgres"',
+    # WordPress/CMS vulnerability probes hitting web dynos that never ran
+    # WordPress; the requested filename can vary (e.g. one containing the
+    # substring "exception", which is why this was slipping past as an error).
+    "/wp-",
 )
 NOISE_RE = re.compile("|".join(re.escape(p) for p in NOISE_PATTERNS), re.IGNORECASE)
 
