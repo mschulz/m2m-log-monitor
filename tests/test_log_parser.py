@@ -131,6 +131,48 @@ def test_classify_drops_wordpress_scanner_noise_on_web_and_router_lines():
     assert warnings == []
 
 
+def test_classify_drops_uvicorn_access_log_despite_keyword_in_path():
+    raw = (
+        '2026-07-17T18:49:36.131488+00:00 app[web.1]: INFO:     20.226.26.5:0 - '
+        '"GET /error.php?phpshells HTTP/1.1" 404 Not Found\n'
+    )
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert errors == []
+    assert warnings == []
+
+
+def test_classify_drops_router_at_info_despite_keyword_in_path():
+    raw = (
+        '2026-07-17T18:49:36.131827+00:00 heroku[router]: at=info method=GET '
+        'path="/error.php?phpshells" host=rating.lawn.com.au status=404\n'
+    )
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert errors == []
+    assert warnings == []
+
+
+def test_classify_keeps_router_at_error_lines():
+    raw = (
+        '2026-07-17T18:49:36.131827+00:00 heroku[router]: at=error code=H12 '
+        'desc="Request timeout" method=GET path="/slow" host=rating.lawn.com.au\n'
+    )
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert len(errors) == 1
+
+
+def test_classify_keeps_uvicorn_error_level_lines():
+    raw = (
+        "2026-07-17T18:49:36.131827+00:00 app[web.1]: ERROR:    Exception in "
+        "ASGI application\n"
+    )
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert len(errors) == 1
+
+
 def test_newest_line_picks_latest_timestamp():
     lines = log_parser.parse_log_text(SAMPLE_LOG)
     newest = log_parser.newest_line(lines)

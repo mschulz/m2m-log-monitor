@@ -41,6 +41,17 @@ NOISE_PATTERNS = (
 )
 NOISE_RE = re.compile("|".join(re.escape(p) for p in NOISE_PATTERNS), re.IGNORECASE)
 
+# Heroku router and uvicorn access-log lines carry their own explicit severity
+# marker, which is authoritative over incidental ERROR_RE/WARNING_RE keyword
+# hits elsewhere in the line (e.g. a scanner requesting "/error.php" or
+# "/wp-includes/registration-exception.php" is still just an INFO-level
+# access-log entry). The router only uses at=error/at=warning for its own
+# routing problems (timeouts, no web dynos, etc.), never merely because the
+# upstream app returned a non-2xx status; uvicorn's access logger is always
+# INFO regardless of response status, with real exceptions logged separately.
+ROUTER_INFO_RE = re.compile(r"(?:^|\s)at=info(?:\s|$)")
+ACCESS_LOG_INFO_RE = re.compile(r"^INFO:\s")
+
 
 @dataclass(frozen=True)
 class LogLine:
@@ -105,18 +116,25 @@ def is_noise_line(line: LogLine) -> bool:
     return bool(NOISE_RE.search(line.message))
 
 
+def has_benign_explicit_level(line: LogLine) -> bool:
+    return bool(ROUTER_INFO_RE.search(line.message) or ACCESS_LOG_INFO_RE.match(line.message))
+
+
 def classify(lines, include_warnings):
     """Split lines into (errors, warnings) preserving order.
 
     Lines matching `NOISE_RE` (known-noisy but not actionable, e.g. Postgres
-    port-scan rejections) are dropped before classification. A remaining
+    port-scan rejections) or carrying their own benign explicit log level
+    (Heroku router `at=info`, uvicorn access-log `INFO:`) are dropped before
+    classification, regardless of incidental keyword hits elsewhere in the
+    line (e.g. a scanner-requested path containing "error"). A remaining
     line matching both error and warning patterns is counted only as an
     error. `warnings` is always `[]` when `include_warnings` is False.
     """
     errors = []
     warnings = []
     for line in lines:
-        if is_noise_line(line):
+        if is_noise_line(line) or has_benign_explicit_level(line):
             continue
         if is_error_line(line):
             errors.append(line)
