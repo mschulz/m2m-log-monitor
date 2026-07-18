@@ -173,6 +173,19 @@ def test_classify_keeps_uvicorn_error_level_lines():
     assert len(errors) == 1
 
 
+def test_classify_drops_regional_access_boundary_noise():
+    raw = (
+        "2026-07-17T10:00:35.120983+00:00 app[scheduler.6392]: Regional Access "
+        "Boundary HTTP request failed after retries: response_data={'error': "
+        "{'code': 403, 'message': 'Permission denied on the service account.', "
+        "'status': 'PERMISSION_DENIED'}}, retryable_error=False\n"
+    )
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert errors == []
+    assert warnings == []
+
+
 def test_newest_line_picks_latest_timestamp():
     lines = log_parser.parse_log_text(SAMPLE_LOG)
     newest = log_parser.newest_line(lines)

@@ -38,6 +38,11 @@ NOISE_PATTERNS = (
     # WordPress; the requested filename can vary (e.g. one containing the
     # substring "exception", which is why this was slipping past as an error).
     "/wp-",
+    # google-auth's best-effort Regional Access Boundary (trust boundary)
+    # lookup on service-account token refresh; failure is swallowed by the
+    # library and the credential refresh/API call still succeeds regardless
+    # (https://github.com/googleapis/google-cloud-python/issues/17515).
+    "Regional Access Boundary HTTP request failed after retries",
 )
 NOISE_RE = re.compile("|".join(re.escape(p) for p in NOISE_PATTERNS), re.IGNORECASE)
 
