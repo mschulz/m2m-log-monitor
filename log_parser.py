@@ -9,6 +9,7 @@ format `heroku logs` prints, e.g.:
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
+import json
 import re
 
 LINE_RE = re.compile(
@@ -56,6 +57,15 @@ NOISE_RE = re.compile("|".join(re.escape(p) for p in NOISE_PATTERNS), re.IGNOREC
 # INFO regardless of response status, with real exceptions logged separately.
 ROUTER_INFO_RE = re.compile(r"(?:^|\s)at=info(?:\s|$)")
 ACCESS_LOG_INFO_RE = re.compile(r"^INFO:\s")
+
+# Upstream apps (m2m-proxy, m2m-sandbox-proxy, ...) emit structured JSON logs
+# whose top-level "level" field is the authoritative severity. When a line body
+# is valid JSON with a string "level", that level decides routing and the
+# keyword heuristics below are never consulted — otherwise the word "Error"
+# appearing in a WARNING line's `message` (or a nested `data.error`) would
+# misroute it to the alert channel. See classify().
+JSON_ERROR_LEVELS = frozenset({"ERROR", "CRITICAL"})
+JSON_WARNING_LEVELS = frozenset({"WARNING", "WARN"})
 
 
 @dataclass(frozen=True)
@@ -125,21 +135,66 @@ def has_benign_explicit_level(line: LogLine) -> bool:
     return bool(ROUTER_INFO_RE.search(line.message) or ACCESS_LOG_INFO_RE.match(line.message))
 
 
+def parse_json_level(line: LogLine) -> str | None:
+    """Return the upper-cased top-level "level" of a JSON log body, else None.
+
+    Upstream apps emit structured JSON (`{"level": "WARNING", "message": ...}`)
+    where `level` is the authoritative severity. `LINE_RE` has already stripped
+    Heroku's `<ts> app[dyno]:` prefix, so `line.message` is the JSON payload —
+    but locate the first `{` defensively in case of leading text, and use
+    `raw_decode` so trailing text after the object doesn't break parsing.
+
+    Returns None when the body isn't a JSON object with a string `"level"`
+    (i.e. Heroku platform lines, uvicorn plaintext, tracebacks) so the caller
+    falls back to the keyword heuristics.
+    """
+    start = line.message.find("{")
+    if start == -1:
+        return None
+    try:
+        obj, _ = json.JSONDecoder().raw_decode(line.message[start:])
+    except ValueError:
+        return None
+    if not isinstance(obj, dict):
+        return None
+    level = obj.get("level")
+    if not isinstance(level, str):
+        return None
+    return level.strip().upper()
+
+
 def classify(lines, include_warnings):
     """Split lines into (errors, warnings) preserving order.
 
     Lines matching `NOISE_RE` (known-noisy but not actionable, e.g. Postgres
-    port-scan rejections) or carrying their own benign explicit log level
-    (Heroku router `at=info`, uvicorn access-log `INFO:`) are dropped before
-    classification, regardless of incidental keyword hits elsewhere in the
-    line (e.g. a scanner-requested path containing "error"). A remaining
-    line matching both error and warning patterns is counted only as an
-    error. `warnings` is always `[]` when `include_warnings` is False.
+    port-scan rejections) are dropped first. For the rest, structured JSON
+    logs win: if a line body is valid JSON with a string `"level"`, that level
+    alone decides routing (ERROR/CRITICAL -> errors, WARNING/WARN -> warnings,
+    DEBUG/INFO -> dropped) and the keyword heuristics are never consulted — so
+    a WARNING line whose `message` (or nested `data.error`) contains the word
+    "Error" can never be misrouted to the error bucket.
+
+    Only non-JSON lines fall back to the keyword heuristics: a benign explicit
+    level (Heroku router `at=info`, uvicorn access-log `INFO:`) is dropped, and
+    the remainder are matched against `ERROR_RE`/`WARNING_RE`, regardless of
+    incidental keyword hits elsewhere in the line (e.g. a scanner-requested
+    path containing "error"). A line matching both error and warning patterns
+    is counted only as an error. `warnings` is always `[]` when
+    `include_warnings` is False.
     """
     errors = []
     warnings = []
     for line in lines:
-        if is_noise_line(line) or has_benign_explicit_level(line):
+        if is_noise_line(line):
+            continue
+        level = parse_json_level(line)
+        if level is not None:
+            if level in JSON_ERROR_LEVELS:
+                errors.append(line)
+            elif include_warnings and level in JSON_WARNING_LEVELS:
+                warnings.append(line)
+            continue
+        if has_benign_explicit_level(line):
             continue
         if is_error_line(line):
             errors.append(line)

@@ -186,6 +186,90 @@ def test_classify_drops_regional_access_boundary_noise():
     assert warnings == []
 
 
+def test_classify_uses_json_level_not_keyword_for_warning_with_error_in_message():
+    # The JSON body's authoritative level is WARNING, but its `message` (and
+    # `logger`) contain the word "Error"/"exceptions". Must NOT alert.
+    raw = (
+        '2026-07-23T03:34:15.000000+00:00 app[web.1]: '
+        '{"timestamp":"2026-07-23T03:34:15","level":"WARNING",'
+        '"logger":"app.core.exceptions","message":"Launch27 API Error: '
+        'Resource not found: v1/staff/teams/105509/availability",'
+        '"status_code":404,"data":{"error":"not found"}}\n'
+    )
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert errors == []
+    assert len(warnings) == 1
+    assert '"level":"WARNING"' in warnings[0].message
+
+
+def test_classify_json_warning_dropped_when_warnings_disabled():
+    raw = (
+        '2026-07-23T03:34:15.000000+00:00 app[web.1]: '
+        '{"level":"WARNING","logger":"app.core.exceptions",'
+        '"message":"Launch27 API Error: Resource not found"}\n'
+    )
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=False)
+    assert errors == []
+    assert warnings == []
+
+
+def test_classify_json_error_level_alerts():
+    raw = (
+        '2026-07-23T03:34:15.000000+00:00 app[web.1]: '
+        '{"level":"ERROR","logger":"app.core.exceptions",'
+        '"message":"Launch27 API failure","status_code":500}\n'
+    )
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert len(errors) == 1
+    assert warnings == []
+
+
+def test_classify_json_critical_level_alerts():
+    raw = (
+        '2026-07-23T03:34:15.000000+00:00 app[web.1]: '
+        '{"level":"CRITICAL","message":"database connection pool exhausted"}\n'
+    )
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert len(errors) == 1
+
+
+def test_classify_json_info_level_dropped_despite_error_keyword():
+    raw = (
+        '2026-07-23T03:34:15.000000+00:00 app[web.1]: '
+        '{"level":"INFO","message":"handled /error.php request",'
+        '"data":{"error":null}}\n'
+    )
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert errors == []
+    assert warnings == []
+
+
+def test_classify_non_json_plaintext_keeps_keyword_fallback():
+    # No JSON body -> documented keyword heuristic still applies.
+    raw = (
+        "2026-07-23T03:34:15.000000+00:00 app[web.1]: ERROR: something broke\n"
+        "2026-07-23T03:34:16.000000+00:00 app[web.1]: WARNING: deprecated config\n"
+        "2026-07-23T03:34:17.000000+00:00 app[web.1]: Request completed normally\n"
+    )
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert len(errors) == 1
+    assert len(warnings) == 1
+
+
+def test_parse_json_level_returns_none_for_non_json():
+    line = log_parser.LogLine(
+        timestamp=None, source="app", dyno="web.1",
+        message="ERROR: plain text traceback", raw="x",
+    )
+    assert log_parser.parse_json_level(line) is None
+
+
 def test_newest_line_picks_latest_timestamp():
     lines = log_parser.parse_log_text(SAMPLE_LOG)
     newest = log_parser.newest_line(lines)
