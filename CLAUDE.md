@@ -46,12 +46,23 @@ them together with no business logic of its own beyond the per-app loop:
   resource itself (`GET /apps/{app}`), not a separate endpoint.
 - **`log_parser.py`** — pure functions, no I/O. Parses Logplex's
   `source[dyno]: message` text format into `LogLine` records, classifies
-  error/warning lines by keyword regex, and computes the "newest line"
+  error/warning lines, and computes the "newest line"
   watermark. `LogLine.hash` (sha256 of the raw line) plus timestamp is what
   makes de-duplication exact even when two lines share a timestamp.
-  `classify()` drops two categories of line before bucketing the rest into
-  errors/warnings:
-  - Lines matching `NOISE_RE` — known-noisy substrings that aren't
+  Severity is decided in this order by `classify()`:
+  - **Structured JSON wins.** Upstream apps (m2m-proxy et al.) emit JSON log
+    bodies whose top-level `"level"` field is authoritative. When
+    `parse_json_level()` extracts a string `level` from the line body,
+    routing is decided by that level alone (`ERROR`/`CRITICAL` -> errors,
+    `WARNING`/`WARN` -> warnings, `DEBUG`/`INFO` -> dropped) and the keyword
+    regexes are never consulted. This is deliberate: these lines routinely
+    carry the word "Error" in their `message` or a nested `data.error`, so
+    substring-matching would misroute WARNING lines to the alert channel.
+  - Only **non-JSON** lines (Heroku platform lines, uvicorn plaintext,
+    tracebacks) fall back to keyword regex (`ERROR_RE`/`WARNING_RE`).
+
+  Two categories of line are also dropped:
+  - Lines matching `NOISE_RE` (checked first, before JSON parsing) — known-noisy substrings that aren't
     actionable, e.g. internet port-scanners hitting Heroku Postgres addons
     (`no pg_hba.conf entry for host`, `unsupported frontend protocol`, `no
     PostgreSQL user name specified in startup packet`, a failed login as
@@ -62,8 +73,8 @@ them together with no business logic of its own beyond the per-app loop:
     [googleapis/google-cloud-python#17515](https://github.com/googleapis/google-cloud-python/issues/17515)).
     Add new substrings to `NOISE_PATTERNS` as new noise sources turn up.
   - Lines where `has_benign_explicit_level()` is true — Heroku router
-    (`at=info`) and uvicorn access-log (`INFO:` prefix) lines carry their
-    own authoritative severity marker, which overrides incidental
+    (`at=info`) and uvicorn access-log (`INFO:` prefix) **non-JSON** lines
+    carry their own authoritative severity marker, which overrides incidental
     `ERROR_RE`/`WARNING_RE` keyword hits elsewhere in the line (e.g. a
     scanner requesting `/error.php` matches `\berror\b` in the URL despite
     the line being pure access-log noise). Genuine router errors
