@@ -10,7 +10,6 @@ MONITORED_APPS = [
     "lca-klaviyo-addresses",
     "lca-launch27",
     "lca-proxy",
-    "m2m-booking-system",
     "m2m-bookings-mcp",
     "m2m-forecast-bookings",
     "m2m-hubspot",
