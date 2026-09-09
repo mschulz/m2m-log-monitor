@@ -7,15 +7,12 @@ load_dotenv()
 
 MONITORED_APPS = [
     "lca-booking-system",
-    "lca-klaviyo-addresses",
     "lca-launch27",
     "lca-proxy",
     "m2m-bookings-mcp",
     "m2m-forecast-bookings",
     "m2m-hubspot",
-    "m2m-klaviyo-addresses",
     "m2m-launch27",
-    "m2m-lead-data",
     "m2m-log-monitor",
     "m2m-new-sales",
     "m2m-pays",
@@ -34,7 +31,6 @@ MONITORED_APPS = [
     "m2mnz-team-details",
     "mlc-lead-data",
     "mlc-ratings",
-    "mlc-zip2location",
 ]
 
 SLACK_CHANNEL_NAME = "#m2m-system-alerts"
