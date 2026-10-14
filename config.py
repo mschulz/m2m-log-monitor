@@ -11,7 +11,6 @@ MONITORED_APPS = [
     "lca-proxy",
     "m2m-bookings-mcp",
     "m2m-forecast-bookings",
-    "m2m-hubspot",
     "m2m-launch27",
     "m2m-log-monitor",
     "m2m-new-sales",
