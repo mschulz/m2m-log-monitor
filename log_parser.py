@@ -44,6 +44,10 @@ NOISE_PATTERNS = (
     # library and the credential refresh/API call still succeeds regardless
     # (https://github.com/googleapis/google-cloud-python/issues/17515).
     "Regional Access Boundary HTTP request failed after retries",
+    # Heroku's own "Expensive Queries" collector closes its TLS connection
+    # without a close_notify; Postgres logs it at LOG level, and the word
+    # "error" in sql_error_code/SSL error was tripping ERROR_RE.
+    'application_name="Heroku Postgres - Expensive Queries" LOG:  SSL error: unexpected eof',
 )
 NOISE_RE = re.compile("|".join(re.escape(p) for p in NOISE_PATTERNS), re.IGNORECASE)
 

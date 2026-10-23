@@ -186,6 +186,31 @@ def test_classify_drops_regional_access_boundary_noise():
     assert warnings == []
 
 
+EXPENSIVE_QUERIES_SSL_EOF = (
+    "2026-10-21T18:03:05.000000+00:00 app[postgres.1157449]: [GRAY] [11-1]  "
+    'sql_error_code = 08P01 time_ms = "2026-10-21 18:03:05.329 UTC" pid="1619196" '
+    'proc_start_time="2026-10-21 18:02:41 UTC" session_id="6ad8fe41.18b4fc" '
+    'vtid="270/0" tid="0" log_line="4" database="d0000000000000" '
+    'connection_source="52.73.131.14(27351)" user="u0000000000000" '
+    'application_name="{app}" LOG:  SSL error: unexpected eof while reading\n'
+)
+
+
+def test_classify_drops_expensive_queries_ssl_eof_noise():
+    raw = EXPENSIVE_QUERIES_SSL_EOF.format(app="Heroku Postgres - Expensive Queries")
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert errors == []
+    assert warnings == []
+
+
+def test_classify_keeps_ssl_eof_from_other_clients():
+    raw = EXPENSIVE_QUERIES_SSL_EOF.format(app="m2m-bookings-mcp")
+    lines = log_parser.parse_log_text(raw)
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert len(errors) == 1
+
+
 def test_classify_uses_json_level_not_keyword_for_warning_with_error_in_message():
     # The JSON body's authoritative level is WARNING, but its `message` (and
     # `logger`) contain the word "Error"/"exceptions". Must NOT alert.
