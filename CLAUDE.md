@@ -72,7 +72,8 @@ them together with no business logic of its own beyond the per-app loop:
     actionable, e.g. internet port-scanners hitting Heroku Postgres addons
     (`no pg_hba.conf entry for host`, `unsupported frontend protocol`, `no
     PostgreSQL user name specified in startup packet`, a failed login as
-    the literal user `"postgres"`), vulnerability scanners probing web
+    the literal user `"postgres"`), Heroku Postgres maintenance closing
+    connections (`57P01`) and cutting the standby's WAL stream, vulnerability scanners probing web
     dynos for a CMS that was never installed (`/wp-`), and google-auth's
     benign Regional Access Boundary token-refresh probe (swallowed
     internally; see

@@ -336,3 +336,35 @@ def test_lines_after_filters_out_already_seen_lines():
         "WARNING: deprecated config used",
         "Request completed normally",
     ]
+
+
+MAINTENANCE_LINES = (
+    "2026-10-29T23:01:16.000000+00:00 app[postgres.3968047]: [GRAY] [11-1]  "
+    'sql_error_code = 57P01 time_ms = "2026-10-29 23:01:16.968 UTC" pid="1832072" '
+    'database="d0000000000000" user="u0000000000000" '
+    'application_name="m2m-ratings-web.1" FATAL:  terminating connection due to administrator command\n'
+    "2026-10-29T23:01:20.000000+00:00 app[postgres.571526]: [GRAY] [12-1]  "
+    'sql_error_code = 57014 time_ms = "2026-10-29 23:01:20.935 UTC" pid="1574009" '
+    'database="[unknown]" user="postgres" '
+    'application_name="standby" ERROR:  canceling statement due to user request\n'
+    "2026-10-29T23:01:20.000000+00:00 app[postgres.4213]: [GRAY] [9-1]  "
+    'sql_error_code = 08P01 time_ms = "2026-10-29 23:01:20.935 UTC" pid="1669" '
+    'log_line="2" FATAL:  could not receive data from WAL stream: '
+    "ERROR:  canceling statement due to user request\n"
+)
+
+
+def test_classify_drops_postgres_maintenance_noise():
+    lines = log_parser.parse_log_text(MAINTENANCE_LINES)
+    assert len(lines) == 3
+    errors, warnings = log_parser.classify(lines, include_warnings=True)
+    assert errors == []
+    assert warnings == []
+
+
+def test_classify_keeps_canceled_statement_from_an_app():
+    raw = MAINTENANCE_LINES.splitlines(keepends=True)[1].replace(
+        'application_name="standby"', 'application_name="m2m-ratings-web.1"'
+    )
+    errors, _ = log_parser.classify(log_parser.parse_log_text(raw), include_warnings=True)
+    assert len(errors) == 1

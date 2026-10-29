@@ -48,6 +48,12 @@ NOISE_PATTERNS = (
     # without a close_notify; Postgres logs it at LOG level, and the word
     # "error" in sql_error_code/SSL error was tripping ERROR_RE.
     'application_name="Heroku Postgres - Expensive Queries" LOG:  SSL error: unexpected eof',
+    # Heroku Postgres maintenance (and HA failover) closes every open
+    # connection (57P01) and briefly cuts the standby's WAL stream. The apps
+    # reconnect via pool_pre_ping, and Heroku emails the owner about it.
+    "FATAL:  terminating connection due to administrator command",
+    'application_name="standby" ERROR:  canceling statement due to user request',
+    "FATAL:  could not receive data from WAL stream",
 )
 NOISE_RE = re.compile("|".join(re.escape(p) for p in NOISE_PATTERNS), re.IGNORECASE)
 
