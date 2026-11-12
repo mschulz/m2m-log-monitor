@@ -55,7 +55,16 @@ NOISE_PATTERNS = (
     'application_name="standby" ERROR:  canceling statement due to user request',
     "FATAL:  could not receive data from WAL stream",
 )
-NOISE_RE = re.compile("|".join(re.escape(p) for p in NOISE_PATTERNS), re.IGNORECASE)
+# Regex noise for lines a plain substring can't pin down.
+NOISE_REGEXES = (
+    # A failed password login (28P01) to the default "postgres" database is a
+    # scanner guessing usernames (admin, root, azure_superuser, ...): Heroku
+    # names each addon database randomly, so the apps never connect to it.
+    r'sql_error_code = 28P01 .*database="postgres"',
+)
+NOISE_RE = re.compile(
+    "|".join([re.escape(p) for p in NOISE_PATTERNS] + list(NOISE_REGEXES)), re.IGNORECASE
+)
 
 # Heroku router and uvicorn access-log lines carry their own explicit severity
 # marker, which is authoritative over incidental ERROR_RE/WARNING_RE keyword

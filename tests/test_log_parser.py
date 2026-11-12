@@ -117,6 +117,28 @@ def test_classify_keeps_password_auth_failure_for_non_default_user():
     assert len(errors) == 1
 
 
+SCANNER_AUTH_LINE = (
+    "2026-11-10T14:31:38.000000+00:00 app[postgres.659864]: [GRAY] [9-1]  "
+    'sql_error_code = 28P01 time_ms = "2026-11-10 14:31:38.926 UTC" pid="28356" '
+    'database="postgres" connection_source="88.214.21.38(50804)" user="azure_superuser" '
+    'application_name="[unknown]" FATAL:  password authentication failed for user "azure_superuser"\n'
+)
+
+
+def test_classify_drops_failed_login_to_default_postgres_database():
+    errors, warnings = log_parser.classify(
+        log_parser.parse_log_text(SCANNER_AUTH_LINE), include_warnings=True
+    )
+    assert errors == []
+    assert warnings == []
+
+
+def test_classify_keeps_failed_login_to_an_app_database():
+    raw = SCANNER_AUTH_LINE.replace('database="postgres"', 'database="d0000000000000"')
+    errors, _ = log_parser.classify(log_parser.parse_log_text(raw), include_warnings=True)
+    assert len(errors) == 1
+
+
 def test_classify_drops_wordpress_scanner_noise_on_web_and_router_lines():
     raw = (
         '2026-07-17T23:42:57.127429+00:00 app[web.1]: INFO:     172.202.76.205:0 - '

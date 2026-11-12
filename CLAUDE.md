@@ -72,13 +72,15 @@ them together with no business logic of its own beyond the per-app loop:
     actionable, e.g. internet port-scanners hitting Heroku Postgres addons
     (`no pg_hba.conf entry for host`, `unsupported frontend protocol`, `no
     PostgreSQL user name specified in startup packet`, a failed login as
-    the literal user `"postgres"`), Heroku Postgres maintenance closing
+    the literal user `"postgres"`, any failed login (`28P01`) to the default
+    `database="postgres"`, which the apps never use), Heroku Postgres maintenance closing
     connections (`57P01`) and cutting the standby's WAL stream, vulnerability scanners probing web
     dynos for a CMS that was never installed (`/wp-`), and google-auth's
     benign Regional Access Boundary token-refresh probe (swallowed
     internally; see
     [googleapis/google-cloud-python#17515](https://github.com/googleapis/google-cloud-python/issues/17515)).
-    Add new substrings to `NOISE_PATTERNS` as new noise sources turn up.
+    Add new substrings to `NOISE_PATTERNS` as new noise sources turn up, and
+    put a pattern in `NOISE_REGEXES` only when a plain substring can't pin it down.
   - Lines where `has_benign_explicit_level()` is true — Heroku router
     (`at=info`) and uvicorn access-log (`INFO:` prefix) **non-JSON** lines
     carry their own authoritative severity marker, which overrides incidental
